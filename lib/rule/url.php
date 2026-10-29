@@ -17,15 +17,12 @@ final class Url
     {
         $value = trim($value);
         if (preg_match('#^https?://[^/?\#]*(.*)$#i', $value, $matches)) {
-            $value = $matches[1];
-        }
-        // якорь до сервера не доходит, в правиле он не нужен
-        $value = explode('#', $value, 2)[0];
-        if ($value === '' || $value[0] === '?') {
-            $value = '/' . $value;
+            // у адреса без пути (https://old.ru или https://old.ru?x=1) путь это главная
+            $value = str_starts_with($matches[1], '/') ? $matches[1] : '/' . $matches[1];
         }
 
-        return $value;
+        // якорь до сервера не доходит, в правиле он не нужен
+        return explode('#', $value, 2)[0];
     }
 
     // откуда: путь с /, звездочка только одна и только в конце, маска без параметров

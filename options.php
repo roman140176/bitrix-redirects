@@ -42,7 +42,7 @@ if ($request->isPost() && $request->getPost('Update') !== null && $right === 'W'
     // лимит и срок только целые больше нуля, иначе возвращаем значение по умолчанию
     foreach (['log_limit', 'log_days'] as $name) {
         $value = (int)$request->getPost($name);
-        Option::set($moduleId, $name, $value > 0 ? (string)$value : Option::getDefault($moduleId, $name));
+        Option::set($moduleId, $name, $value > 0 ? (string)$value : (string)Option::getDefaults($moduleId)[$name]);
     }
     Option::set($moduleId, 'log_ignore', trim((string)$request->getPost('log_ignore')));
 

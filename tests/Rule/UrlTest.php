@@ -17,6 +17,14 @@ final class UrlTest extends TestCase
         self::assertSame('/?x=1', Url::fromInput('http://old.ru?x=1'));
     }
 
+    public function testEmptyStaysEmpty(): void
+    {
+        // пустое поле формы не должно превращаться в правило для главной
+        self::assertSame('', Url::fromInput(''));
+        self::assertSame('', Url::fromInput('   '));
+        self::assertSame('/', Url::fromInput('http://old.ru#top'));
+    }
+
     public function testAnchorIsDropped(): void
     {
         self::assertSame('/a/', Url::fromInput('/a/#top'));

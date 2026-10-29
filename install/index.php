@@ -34,7 +34,11 @@ class roman140176_redirects extends CModule
     ];
     private const CLEANUP_INTERVAL = 86400;
     // страницы админки: заглушка в /bitrix/admin => файл в admin/ модуля
-    private const ADMIN_PAGES = [];
+    private const ADMIN_PAGES = [
+        'roman140176_redirects_rules.php' => 'rule_list.php',
+        'roman140176_redirects_rule_edit.php' => 'rule_edit.php',
+        'roman140176_redirects_log.php' => 'log_list.php',
+    ];
 
     public function __construct()
     {
