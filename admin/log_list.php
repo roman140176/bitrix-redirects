@@ -6,6 +6,7 @@ use Bitrix\Main\Loader;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\SiteTable;
 use Bitrix\Main\UI\Filter\Options;
+use Roman140176\Redirects\Log\NotFoundLog;
 use Roman140176\Redirects\Model\NotFoundTable;
 
 /** @global CMain $APPLICATION */
@@ -146,6 +147,14 @@ require $_SERVER['DOCUMENT_ROOT'] . '/bitrix/modules/main/include/prolog_admin_a
 if (Option::get($moduleId, 'log_enabled') !== 'Y') {
     echo BeginNote();
     echo Loc::getMessage('ROMAN140176_REDIRECTS_LOG_DISABLED', [
+        '#URL#' => htmlspecialcharsbx('settings.php?mid=' . urlencode($moduleId) . '&lang=' . LANGUAGE_ID),
+    ]);
+    echo EndNote();
+} elseif (NotFoundLog::isFull()) {
+    // иначе журнал молча перестанет пополняться, пока агент не почистит старое
+    echo BeginNote();
+    echo Loc::getMessage('ROMAN140176_REDIRECTS_LOG_FULL', [
+        '#LIMIT#' => (int)Option::get($moduleId, 'log_limit'),
         '#URL#' => htmlspecialcharsbx('settings.php?mid=' . urlencode($moduleId) . '&lang=' . LANGUAGE_ID),
     ]);
     echo EndNote();

@@ -25,6 +25,29 @@ final class UrlTest extends TestCase
         self::assertSame('/', Url::fromInput('http://old.ru#top'));
     }
 
+    public function testSpacesInsideAddressAreEncoded(): void
+    {
+        self::assertSame('/My%20File.pdf', Url::fromInput('https://old.ru/My File.pdf'));
+        self::assertSame('/a%20b/', Url::fromInput(' /a b/ '));
+    }
+
+    public function testReadableKeepsSpecialCharsEncoded(): void
+    {
+        // в журнале кириллица читаемая, а пробел, %, # и ? остаются закодированными, иначе правило из такого адреса не сохранить
+        self::assertSame('/я/', Url::readable('/%D1%8F/'));
+        self::assertSame('/My%20File.pdf', Url::readable('/My%20File.pdf'));
+        self::assertSame('/100%25/', Url::readable('/100%25/'));
+        self::assertSame('/a%3Fb%23c/', Url::readable('/a%3Fb%23c/'));
+    }
+
+    public function testTrackingParamsAreDropped(): void
+    {
+        self::assertSame('id=5', Url::withoutTracking('utm_source=a&id=5&yclid=1&YSCLID=2&gclid=3&fbclid=4&_openstat=5&UTM_MEDIUM=b'));
+        self::assertSame('page=2&sort=price', Url::withoutTracking('page=2&sort=price'));
+        self::assertSame('', Url::withoutTracking('utm_source=a'));
+        self::assertSame('', Url::withoutTracking(''));
+    }
+
     public function testAnchorIsDropped(): void
     {
         self::assertSame('/a/', Url::fromInput('/a/#top'));
@@ -72,6 +95,9 @@ final class UrlTest extends TestCase
             ['ftp://x', false],
             ['new', false],
             ['https://', false],
+            ['https://new.ru*', false],
+            ['https://*.new.ru/', false],
+            ['https://new.ru?x=*', true],
             ['/a/*/*', false],
             ['/a b/', false],
         ];

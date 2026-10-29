@@ -43,10 +43,11 @@ final class CsvReader
             }
 
             $number = $index + 1;
-            // первая строка без адреса в начале это заголовок вроде "Откуда;Куда"
+            // первая строка без адресов это заголовок вроде "Откуда;Куда". Если адрес есть хоть в одной ячейке,
+            // это правило, пусть даже с ошибкой: молча терять его нельзя
             if ($first) {
                 $first = false;
-                if (!str_starts_with($cells[0], '/') && !preg_match('#^https?://#i', $cells[0])) {
+                if (!self::isAddress($cells[0]) && !self::isAddress($cells[1] ?? '')) {
                     continue;
                 }
             }
@@ -62,6 +63,11 @@ final class CsvReader
         }
 
         return ['rows' => $rows, 'errors' => $errors];
+    }
+
+    private static function isAddress(string $cell): bool
+    {
+        return str_starts_with($cell, '/') || preg_match('#^https?://#i', $cell) === 1;
     }
 
     // чего в строке больше, то и разделитель. При равенстве точка с запятой: запятая бывает внутри адреса

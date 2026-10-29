@@ -11,6 +11,8 @@ final class Url
 {
     public const SOURCE_MAX_LENGTH = 255;
     public const TARGET_MAX_LENGTH = 500;
+    // метки рекламы и счетчиков: на каждый клик свои, для журнала и правил это шум
+    private const TRACKING = '/^(utm_.+|yclid|ysclid|gclid|fbclid|_openstat)$/';
 
     // полный адрес старого сайта превращаем в путь: https://old.ru/a/?x=1 => /a/?x=1
     public static function fromInput(string $value): string
@@ -21,8 +23,10 @@ final class Url
             $value = str_starts_with($matches[1], '/') ? $matches[1] : '/' . $matches[1];
         }
 
-        // якорь до сервера не доходит, в правиле он не нужен
-        return explode('#', $value, 2)[0];
+        // якорь до сервера не доходит, в правиле он не нужен. Пробел внутри адреса браузер шлет как %20
+        $value = explode('#', $value, 2)[0];
+
+        return preg_replace('/\s/u', '%20', $value) ?? $value;
     }
 
     // откуда: путь с /, звездочка только одна и только в конце, маска без параметров
@@ -44,7 +48,8 @@ final class Url
             return false;
         }
 
-        return (bool)preg_match('#^(/(?!/)|https?://[^/?\#]+)#i', $target);
+        // звездочка в домене дала бы адрес вроде https://new.ru@evil.ru, то есть увод на чужой сайт
+        return (bool)preg_match('#^(/(?!/)|https?://[^/?\#*]+(?=[/?]|$))#i', $target);
     }
 
     // по ключу правила сравниваются между собой: без регистра, без хвостового слеша, параметры по алфавиту
@@ -59,6 +64,28 @@ final class Url
         sort($pairs);
 
         return self::pathKey($path) . ($pairs !== [] ? '?' . implode('&', $pairs) : '');
+    }
+
+    // адрес для людей: кириллица читаемая, а пробел, %, # и ? остаются кодами, иначе адрес поменяет смысл
+    public static function readable(string $path): string
+    {
+        return self::escape(rawurldecode($path));
+    }
+
+    // кодирует то, что в раскодированном пути ломает адрес: пробелы, %, # и ?
+    public static function escape(string $text): string
+    {
+        return preg_replace_callback('/[\s%#?]/', static fn (array $m): string => rawurlencode($m[0]), $text);
+    }
+
+    // убирает из параметров метки рекламы, остальные оставляет как пришли
+    public static function withoutTracking(string $query): string
+    {
+        $pairs = array_filter(self::pairs($query), static function (string $pair): bool {
+            return !preg_match(self::TRACKING, mb_strtolower(urldecode(explode('=', $pair, 2)[0])));
+        });
+
+        return implode('&', $pairs);
     }
 
     // заголовок Location должен быть в ASCII, кириллицу и пробелы кодируем

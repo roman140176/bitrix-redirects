@@ -18,7 +18,7 @@ if ($right < 'R' || !Loader::includeModule($moduleId)) {
 }
 $canEdit = $right >= 'W';
 
-// таблицу на тысячи правил это не ограничивает: 2 МБ это десятки тысяч строк
+// 2 МБ это десятки тысяч строк, импорт идет одной транзакцией, 40 тысяч строк грузятся секунд за 8
 $maxSize = 2 * 1024 * 1024;
 
 $request = Application::getInstance()->getContext()->getRequest();
@@ -123,10 +123,7 @@ if ($result !== null) {
         <td class="adm-detail-valign-top"><?= Loc::getMessage('ROMAN140176_REDIRECTS_IMPORT_FORMAT') ?>:</td>
         <td>
             <?= Loc::getMessage('ROMAN140176_REDIRECTS_IMPORT_FORMAT_HINT') ?>
-            <pre>Откуда;Куда;Код
-https://old-site.ru/about-us.html;/about/
-/catalog/old-chairs/;/catalog/chairs/;301
-/actions/*;/sale/*;302</pre>
+            <pre><?= htmlspecialcharsbx(Loc::getMessage('ROMAN140176_REDIRECTS_IMPORT_EXAMPLE')) ?></pre>
         </td>
     </tr>
     <?php $tabControl->Buttons(); ?>

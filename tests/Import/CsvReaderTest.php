@@ -51,6 +51,15 @@ final class CsvReaderTest extends TestCase
         self::assertSame('https://old.ru/a/', $data['rows'][0]['source']);
     }
 
+    public function testFirstLineWithAddressInSecondCellIsNotHeader(): void
+    {
+        // забыли слеш в первой ячейке: это строка с ошибкой, а не заголовок, терять ее молча нельзя
+        $data = (new CsvReader())->read("old.html;/new/\n/a/;/b/");
+
+        self::assertSame([1, 2], array_column($data['rows'], 'line'));
+        self::assertSame('old.html', $data['rows'][0]['source']);
+    }
+
     public function testEmptyLinesAreSkippedAndSpacesTrimmed(): void
     {
         $data = (new CsvReader())->read("\n /a/ ; /b/ \n\n;;\n/c/;/d/");

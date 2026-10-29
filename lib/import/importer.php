@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Roman140176\Redirects\Import;
 
+use Bitrix\Main\Application;
+use Bitrix\Main\DB\SqlQueryException;
 use Bitrix\Main\Localization\Loc;
 use Roman140176\Redirects\Log\NotFoundLog;
 use Roman140176\Redirects\Model\RuleTable;
@@ -11,7 +13,8 @@ use Roman140176\Redirects\Rule\ChainChecker;
 use Roman140176\Redirects\Rule\Url;
 
 /**
- * Импорт правил из CSV. Каждая строка сохраняется через RuleTable, так что дубли и петли ловятся как в форме
+ * Импорт правил из CSV. Дубли и петли ловятся так же, как в форме, только проверяются по списку в памяти:
+ * проверка через базу на каждой строке на тысячах строк шла бы минуты
  */
 final class Importer
 {
@@ -24,21 +27,25 @@ final class Importer
             $errors[] = ['line' => $error['line'], 'message' => Loc::getMessage('ROMAN140176_REDIRECTS_IMPORT_' . $error['code'])];
         }
 
-        // номер строки => ID нового правила, нужен для цепочек
+        $checker = new ChainChecker(RuleTable::activeRules($siteId), RuleTable::siteHosts($siteId));
+        // ключи всех правил сайта, и выключенных тоже: дубль это дубль
+        $keys = array_flip(array_column(
+            RuleTable::getList(['select' => ['SOURCE_KEY'], 'filter' => ['=SITE_ID' => $siteId]])->fetchAll(),
+            'SOURCE_KEY'
+        ));
+        // номер строки => новое правило, нужно для цепочек
         $added = [];
-        foreach ($data['rows'] as $row) {
-            $result = RuleTable::add([
-                'SITE_ID' => $siteId,
-                'ACTIVE' => true,
-                'SOURCE' => Url::fromInput($row['source']),
-                'TARGET' => $row['target'],
-                'STATUS' => $row['status'] ?? $defaultStatus,
-            ]);
-            if ($result->isSuccess()) {
-                $added[$row['line']] = (int)$result->getId();
-            } else {
-                $errors[] = ['line' => $row['line'], 'message' => implode('; ', $result->getErrorMessages())];
-            }
+
+        // одна транзакция на весь файл: фиксировать каждую строку отдельно в разы дольше.
+        // Ошибка одной строки транзакцию не ломает, MySQL откатывает только эту вставку
+        $connection = Application::getConnection();
+        $connection->startTransaction();
+        try {
+            $this->addRows($data['rows'], $siteId, $defaultStatus, $checker, $keys, $added, $errors);
+            $connection->commitTransaction();
+        } catch (\Throwable $e) {
+            $connection->rollbackTransaction();
+            throw $e;
         }
         usort($errors, static fn (array $a, array $b): int => $a['line'] <=> $b['line']);
 
@@ -46,10 +53,8 @@ final class Importer
         if ($added !== []) {
             NotFoundLog::forgetMatched($siteId);
 
-            $rules = RuleTable::activeRules($siteId);
-            $byId = array_column($rules, null, 'ID');
-            foreach ($added as $line => $id) {
-                $chain = ChainChecker::check($rules, $byId[$id]);
+            foreach ($added as $line => $rule) {
+                $chain = $checker->follow($rule);
                 if ($chain->isChain()) {
                     $chains[] = ['line' => $line, 'urls' => $chain->urls];
                 }
@@ -57,5 +62,50 @@ final class Importer
         }
 
         return new ImportResult(count($added), $errors, $chains);
+    }
+
+    private function addRows(array $rows, string $siteId, int $defaultStatus, ChainChecker $checker, array &$keys, array &$added, array &$errors): void
+    {
+        RuleTable::bulk(function () use ($rows, $siteId, $defaultStatus, $checker, &$keys, &$added, &$errors): void {
+            foreach ($rows as $row) {
+                $rule = [
+                    'ID' => 0,
+                    'SOURCE' => Url::fromInput($row['source']),
+                    'TARGET' => $row['target'],
+                    'STATUS' => $row['status'] ?? $defaultStatus,
+                ];
+
+                // кривые адреса и код отклонят валидаторы RuleTable, тут проверяем только то, что они не видят
+                if (Url::isSource($rule['SOURCE']) && Url::isTarget($rule['TARGET'])) {
+                    $key = Url::key($rule['SOURCE']);
+                    if (isset($keys[$key])) {
+                        $errors[] = ['line' => $row['line'], 'message' => RuleTable::duplicateMessage($rule['SOURCE'])];
+                        continue;
+                    }
+                    $chain = $checker->follow($rule);
+                    if ($chain->loop) {
+                        $errors[] = ['line' => $row['line'], 'message' => RuleTable::loopMessage($chain)];
+                        continue;
+                    }
+                }
+
+                try {
+                    $result = RuleTable::add(['SITE_ID' => $siteId, 'ACTIVE' => true] + array_diff_key($rule, ['ID' => 0]));
+                } catch (SqlQueryException) {
+                    // такое же правило только что добавили в другой вкладке, уникальный ключ не пустил
+                    $errors[] = ['line' => $row['line'], 'message' => RuleTable::duplicateMessage($rule['SOURCE'])];
+                    continue;
+                }
+                if (!$result->isSuccess()) {
+                    $errors[] = ['line' => $row['line'], 'message' => implode('; ', $result->getErrorMessages())];
+                    continue;
+                }
+
+                $rule['ID'] = (int)$result->getId();
+                $keys[Url::key($rule['SOURCE'])] = true;
+                $checker->add($rule);
+                $added[$row['line']] = $rule;
+            }
+        });
     }
 }

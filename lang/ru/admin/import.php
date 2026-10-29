@@ -19,4 +19,5 @@ $MESS['ROMAN140176_REDIRECTS_IMPORT_STATUS_301'] = '301, переехало на
 $MESS['ROMAN140176_REDIRECTS_IMPORT_STATUS_302'] = '302, временно';
 $MESS['ROMAN140176_REDIRECTS_IMPORT_FORMAT'] = 'Как должен выглядеть файл';
 $MESS['ROMAN140176_REDIRECTS_IMPORT_FORMAT_HINT'] = 'Колонки: откуда, куда и код ответа (можно не указывать). Разделитель точка с запятой, запятая или табуляция. Строка с заголовками не мешает. Файл из Excel можно грузить как есть, кодировку модуль поймет сам.';
+$MESS['ROMAN140176_REDIRECTS_IMPORT_EXAMPLE'] = "Откуда;Куда;Код\nhttps://old-site.ru/about-us.html;/about/\n/catalog/old-chairs/;/catalog/chairs/;301\n/actions/*;/sale/*;302";
 $MESS['ROMAN140176_REDIRECTS_IMPORT_SUBMIT'] = 'Загрузить';

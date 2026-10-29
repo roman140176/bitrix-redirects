@@ -3,7 +3,7 @@ CREATE TABLE roman140176_redirects_rule (
     SITE_ID char(2) NOT NULL,
     ACTIVE char(1) NOT NULL DEFAULT 'Y',
     SOURCE varchar(255) NOT NULL,
-    SOURCE_KEY varchar(255) NOT NULL,
+    SOURCE_KEY varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
     TARGET varchar(500) NOT NULL,
     STATUS smallint NOT NULL DEFAULT 301,
     HITS int NOT NULL DEFAULT 0,

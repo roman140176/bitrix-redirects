@@ -103,6 +103,46 @@ final class MatcherTest extends TestCase
         self::assertSame('https://new.ru/%D1%81%D1%82%D1%83%D0%BB%D1%8C%D1%8F/', $matcher->match('/catalog/%D1%81%D1%82%D1%83%D0%BB%D1%8C%D1%8F/')?->url);
     }
 
+    public function testTailWithEncodedPercentQuestionAndHash(): void
+    {
+        $matcher = $this->matcher(['/catalog/*' => '/shop/*']);
+
+        self::assertSame('/shop/100%25-cotton/', $matcher->match('/catalog/100%25-cotton/')?->url);
+        self::assertSame('/shop/a%3Fb%23c/', $matcher->match('/catalog/a%3Fb%23c/')?->url);
+    }
+
+    public function testAddressFromLogMatchesRuleFromLog(): void
+    {
+        // журнал хранит /My%20File.pdf, правило из него такое же, запрос браузера тоже
+        $matcher = $this->matcher(['/My%20File.pdf' => '/files/my-file.pdf']);
+
+        self::assertSame('/files/my-file.pdf', $matcher->match('/My%20File.pdf')?->url);
+    }
+
+    public function testWithRuleAddsWithoutChangingOriginal(): void
+    {
+        $matcher = $this->matcher(['/old/' => '/new/']);
+        $more = $matcher->withRule(['ID' => 9, 'SOURCE' => '/blog/*', 'TARGET' => '/news/*', 'STATUS' => 302]);
+
+        self::assertSame('/news/a/', $more->match('/blog/a/')?->url);
+        self::assertSame(9, $more->match('/blog/a/')?->ruleId);
+        self::assertSame('/new/', $more->match('/old/')?->url);
+        self::assertNull($matcher->match('/blog/a/'));
+    }
+
+    public function testMatchWithPicksMoreExactRuleFromEitherIndex(): void
+    {
+        $mask = Matcher::fromRules([['ID' => 1, 'SOURCE' => '/a/*', 'TARGET' => '/mask/', 'STATUS' => 301]]);
+        $exact = Matcher::fromRules([['ID' => 2, 'SOURCE' => '/a/b/', 'TARGET' => '/exact/', 'STATUS' => 301]]);
+        $query = Matcher::fromRules([['ID' => 3, 'SOURCE' => '/a/b/?id=5', 'TARGET' => '/query/', 'STATUS' => 301]]);
+
+        self::assertSame('/exact/', $mask->matchWith($exact, '/a/b/')?->url);
+        self::assertSame('/exact/', $exact->matchWith($mask, '/a/b/')?->url);
+        self::assertSame('/query/', $exact->matchWith($query, '/a/b/?id=5')?->url);
+        self::assertSame('/mask/', $exact->matchWith($mask, '/a/c/')?->url);
+        self::assertNull($exact->matchWith($query, '/z/'));
+    }
+
     public function testRootRuleAndRootMask(): void
     {
         self::assertSame('/home/', $this->matcher(['/' => '/home/'])->match('/')?->url);

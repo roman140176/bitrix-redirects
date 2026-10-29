@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Roman140176\Redirects\Model;
 
 use Bitrix\Main\Application;
+use Bitrix\Main\Config\Option;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ORM\Data\DataManager;
 use Bitrix\Main\ORM\EntityError;
@@ -15,7 +16,10 @@ use Bitrix\Main\ORM\Fields\DatetimeField;
 use Bitrix\Main\ORM\Fields\IntegerField;
 use Bitrix\Main\ORM\Fields\StringField;
 use Bitrix\Main\ORM\Fields\Validators\RegExpValidator;
+use Bitrix\Main\SiteDomainTable;
+use Bitrix\Main\SiteTable;
 use Bitrix\Main\Type\DateTime;
+use Roman140176\Redirects\Rule\Chain;
 use Roman140176\Redirects\Rule\ChainChecker;
 use Roman140176\Redirects\Rule\Url;
 use Roman140176\Redirects\RuleCache;
@@ -26,6 +30,9 @@ use Roman140176\Redirects\RuleCache;
 class RuleTable extends DataManager
 {
     public const STATUSES = [301, 302];
+
+    // в пакетном режиме дубли и петли проверяет импорт сам, по списку в памяти, а кеш сбрасывается один раз в конце
+    private static bool $bulk = false;
 
     public static function getTableName(): string
     {
@@ -84,17 +91,23 @@ class RuleTable extends DataManager
 
     public static function onAfterAdd(Event $event): void
     {
-        RuleCache::clear();
+        if (!self::$bulk) {
+            RuleCache::clear();
+        }
     }
 
     public static function onAfterUpdate(Event $event): void
     {
-        RuleCache::clear();
+        if (!self::$bulk) {
+            RuleCache::clear();
+        }
     }
 
     public static function onAfterDelete(Event $event): void
     {
-        RuleCache::clear();
+        if (!self::$bulk) {
+            RuleCache::clear();
+        }
     }
 
     /**
@@ -114,6 +127,46 @@ class RuleTable extends DataManager
             'TARGET' => (string)$row['TARGET'],
             'STATUS' => (int)$row['STATUS'],
         ], $rows);
+    }
+
+    // много правил подряд (импорт): без проверок на каждой строке, иначе тысячи строк идут минуты
+    public static function bulk(callable $callback): mixed
+    {
+        self::$bulk = true;
+        try {
+            return $callback();
+        } finally {
+            self::$bulk = false;
+            RuleCache::clear();
+        }
+    }
+
+    /**
+     * @return string[] домены сайта: полный адрес на них в "Куда" это тот же сайт
+     */
+    public static function siteHosts(string $siteId): array
+    {
+        $hosts = array_column(SiteDomainTable::getList(['select' => ['DOMAIN'], 'filter' => ['=LID' => $siteId]])->fetchAll(), 'DOMAIN');
+        $serverName = (string)(SiteTable::getList(['select' => ['SERVER_NAME'], 'filter' => ['=LID' => $siteId]])->fetch()['SERVER_NAME'] ?? '');
+        if ($serverName !== '') {
+            $hosts[] = $serverName;
+        }
+        // у сайта домен не задан: берем общий из настроек главного модуля
+        if ($hosts === []) {
+            $hosts[] = Option::get('main', 'server_name');
+        }
+
+        return array_values(array_filter($hosts));
+    }
+
+    public static function duplicateMessage(string $source): string
+    {
+        return (string)Loc::getMessage('ROMAN140176_REDIRECTS_RULE_DUPLICATE', ['#SOURCE#' => $source]);
+    }
+
+    public static function loopMessage(Chain $chain): string
+    {
+        return (string)Loc::getMessage('ROMAN140176_REDIRECTS_RULE_LOOP', ['#CHAIN#' => implode(' > ', $chain->urls)]);
     }
 
     // счетчик пишем мимо ORM: события сбросили бы кеш правил на каждом редиректе
@@ -141,6 +194,9 @@ class RuleTable extends DataManager
 
         $key = Url::key($source);
         $result->modifyFields(['SOURCE_KEY' => $key]);
+        if (self::$bulk) {
+            return $result;
+        }
 
         $duplicate = self::query()
             ->setSelect(['ID'])
@@ -149,7 +205,7 @@ class RuleTable extends DataManager
             ->where('ID', '!=', $id)
             ->fetch();
         if ($duplicate) {
-            $result->addError(new EntityError(Loc::getMessage('ROMAN140176_REDIRECTS_RULE_DUPLICATE', ['#SOURCE#' => $source])));
+            $result->addError(new EntityError(self::duplicateMessage($source)));
 
             return $result;
         }
@@ -162,9 +218,9 @@ class RuleTable extends DataManager
                 'SOURCE' => $source,
                 'TARGET' => $target,
                 'STATUS' => (int)($fields['STATUS'] ?? 301),
-            ]);
+            ], self::siteHosts($siteId));
             if ($chain->loop) {
-                $result->addError(new EntityError(Loc::getMessage('ROMAN140176_REDIRECTS_RULE_LOOP', ['#CHAIN#' => implode(' > ', $chain->urls)])));
+                $result->addError(new EntityError(self::loopMessage($chain)));
             }
         }
 

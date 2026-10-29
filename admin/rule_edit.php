@@ -5,7 +5,9 @@ use Bitrix\Main\Loader;
 use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\SiteTable;
 use Roman140176\Redirects\Log\NotFoundLog;
+use Roman140176\Redirects\Model\EO_Rule;
 use Roman140176\Redirects\Model\RuleTable;
+use Roman140176\Redirects\Rule\Chain;
 use Roman140176\Redirects\Rule\ChainChecker;
 use Roman140176\Redirects\Rule\Url;
 
@@ -30,6 +32,14 @@ $tabControl = new CAdminTabControl('roman140176_redirects_rule_edit', [
 ]);
 
 $sites = array_column(SiteTable::getList(['select' => ['LID', 'NAME'], 'order' => ['SORT' => 'ASC']])->fetchAll(), 'NAME', 'LID');
+
+// куда в итоге попадет посетитель по сохраненному правилу
+$ruleChain = static fn (EO_Rule $rule): Chain => ChainChecker::check(RuleTable::activeRules($rule->getSiteId()), [
+    'ID' => $rule->getId(),
+    'SOURCE' => $rule->getSource(),
+    'TARGET' => $rule->getTarget(),
+    'STATUS' => $rule->getStatus(),
+], RuleTable::siteHosts($rule->getSiteId()));
 
 if ($id > 0) {
     $rule = RuleTable::getByPrimary($id)->fetchObject();
@@ -66,7 +76,9 @@ if ($rule !== null && $request->isPost() && ($request->getPost('save') !== null 
         $result = $rule->save();
         if ($result->isSuccess()) {
             NotFoundLog::forgetMatched($rule->getSiteId());
-            LocalRedirect($request->getPost('apply') !== null
+            // если правило попало в цепочку, остаемся в форме: там предупреждение, куда лучше вести
+            $stay = $request->getPost('apply') !== null || ($rule->getActive() && $ruleChain($rule)->isChain());
+            LocalRedirect($stay
                 ? 'roman140176_redirects_rule_edit.php?ID=' . $rule->getId() . '&lang=' . LANGUAGE_ID . '&' . $tabControl->ActiveTabParam()
                 : $listUrl);
         }
@@ -117,12 +129,7 @@ if ($rule === null) {
 
 // сохраненное правило проверяем на цепочку: лишний редирект работает, но лучше вести сразу на последний адрес
 if ($id > 0 && $errors === [] && $rule->getActive()) {
-    $chain = ChainChecker::check(RuleTable::activeRules($rule->getSiteId()), [
-        'ID' => $id,
-        'SOURCE' => $rule->getSource(),
-        'TARGET' => $rule->getTarget(),
-        'STATUS' => $rule->getStatus(),
-    ]);
+    $chain = $ruleChain($rule);
     if ($chain->isChain()) {
         echo BeginNote();
         echo Loc::getMessage('ROMAN140176_REDIRECTS_EDIT_CHAIN', [

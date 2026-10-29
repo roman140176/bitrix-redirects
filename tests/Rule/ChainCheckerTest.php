@@ -89,6 +89,47 @@ final class ChainCheckerTest extends TestCase
         self::assertTrue(ChainChecker::check($rules, $rules[1])->isChain());
     }
 
+    public function testMaskLoopThroughTailOfAnotherRule(): void
+    {
+        // /a/x/ => /b/x/ по маске, а /b/x/ уже ведет обратно на /a/x/
+        $rules = [$this->rule(1, '/b/x/', '/a/x/')];
+
+        self::assertTrue(ChainChecker::check($rules, $this->rule(0, '/a/*', '/b/*'))->loop);
+    }
+
+    public function testMaskWithoutLoopStaysAllowed(): void
+    {
+        $rules = [$this->rule(1, '/b/x/', '/c/'), $this->rule(2, '/a/x/*', '/x/')];
+
+        self::assertFalse(ChainChecker::check($rules, $this->rule(0, '/a/*', '/b/*'))->loop);
+    }
+
+    public function testOwnDomainIsFollowed(): void
+    {
+        $rules = [$this->rule(1, '/a/', 'https://site.ru/b/')];
+        $back = $this->rule(0, '/b/', 'https://www.SITE.ru:443/a/');
+
+        self::assertTrue(ChainChecker::check($rules, $back, ['site.ru'])->loop);
+        self::assertFalse(ChainChecker::check($rules, $back, ['other.ru'])->loop);
+    }
+
+    public function testChainThroughOwnDomainIsShown(): void
+    {
+        $rules = [$this->rule(1, '/a/', 'https://site.ru/b/'), $this->rule(2, '/b/', '/c/')];
+
+        self::assertSame(['/a/', 'https://site.ru/b/', '/c/'], ChainChecker::check($rules, $rules[0], ['www.site.ru'])->urls);
+    }
+
+    public function testCheckerKeepsRulesAddedDuringImport(): void
+    {
+        $checker = new ChainChecker([]);
+        self::assertFalse($checker->follow($this->rule(0, '/a/', '/b/'))->loop);
+        $checker->add($this->rule(1, '/a/', '/b/'));
+
+        self::assertTrue($checker->follow($this->rule(0, '/b/', '/a/'))->loop);
+        self::assertSame(['/c/', '/a/', '/b/'], $checker->follow($this->rule(0, '/c/', '/a/'))->urls);
+    }
+
     private function rule(int $id, string $source, string $target): array
     {
         return ['ID' => $id, 'SOURCE' => $source, 'TARGET' => $target, 'STATUS' => 301];

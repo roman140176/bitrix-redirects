@@ -22,9 +22,11 @@ final class NotFoundLog
     public static function add(string $siteId, string $uri, string $referer): void
     {
         [$path, $query] = Url::split($uri);
-        // кириллицу храним читаемой, а битую кодировку от сканеров оставляем как пришла
-        $decoded = rawurldecode($path);
-        $url = (mb_check_encoding($decoded, 'UTF-8') ? $decoded : $path) . ($query !== '' ? '?' . $query : '');
+        // кириллицу храним читаемой, а битую кодировку от сканеров оставляем как пришла.
+        // Метки рекламы выкидываем: у Директа и Google они свои на каждый клик и дробили бы адрес на тысячи строк
+        $readable = Url::readable($path);
+        $query = Url::withoutTracking($query);
+        $url = (mb_check_encoding($readable, 'UTF-8') ? $readable : $path) . ($query !== '' ? '?' . $query : '');
         $url = mb_substr(mb_scrub($url, 'UTF-8'), 0, self::MAX_LENGTH);
         $referer = mb_substr(mb_scrub($referer, 'UTF-8'), 0, self::MAX_LENGTH);
 
@@ -61,6 +63,13 @@ final class NotFoundLog
             $now,
             $now
         ));
+    }
+
+    public static function isFull(): bool
+    {
+        $count = (int)Application::getConnection()->queryScalar('SELECT COUNT(*) FROM ' . NotFoundTable::getTableName());
+
+        return $count >= (int)Option::get(self::MODULE_ID, 'log_limit');
     }
 
     // убирает из журнала адреса, на которые уже есть правило. Зовут после сохранения правил
