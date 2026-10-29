@@ -27,5 +27,9 @@ return [
             'text' => Loc::getMessage('ROMAN140176_REDIRECTS_MENU_LOG'),
             'url' => 'roman140176_redirects_log.php?lang=' . LANGUAGE_ID,
         ],
+        [
+            'text' => Loc::getMessage('ROMAN140176_REDIRECTS_MENU_IMPORT'),
+            'url' => 'roman140176_redirects_import.php?lang=' . LANGUAGE_ID,
+        ],
     ],
 ];

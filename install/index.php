@@ -38,6 +38,7 @@ class roman140176_redirects extends CModule
         'roman140176_redirects_rules.php' => 'rule_list.php',
         'roman140176_redirects_rule_edit.php' => 'rule_edit.php',
         'roman140176_redirects_log.php' => 'log_list.php',
+        'roman140176_redirects_import.php' => 'import.php',
     ];
 
     public function __construct()
