@@ -10,6 +10,7 @@ use Bitrix\Main\Localization\Loc;
 use Bitrix\Main\ModuleManager;
 use Bitrix\Main\Web\Json;
 use Roman140176\Redirects\EventHandler;
+use Roman140176\Redirects\Log\NotFoundLog;
 use Roman140176\Redirects\RuleCache;
 
 class roman140176_redirects extends CModule
@@ -29,7 +30,9 @@ class roman140176_redirects extends CModule
     // событие ядра => метод EventHandler
     private const EVENTS = [
         'OnPageStart' => 'onPageStart',
+        'OnEpilog' => 'onEpilog',
     ];
+    private const CLEANUP_INTERVAL = 86400;
     // страницы админки: заглушка в /bitrix/admin => файл в admin/ модуля
     private const ADMIN_PAGES = [];
 
@@ -100,7 +103,7 @@ class roman140176_redirects extends CModule
         return $this->UnInstallDB(['savedata' => $keepData]);
     }
 
-    // таблицы, регистрация, обработчики событий. Таблицы, оставшиеся от удаления с сохранением данных, берем как есть
+    // таблицы, регистрация, обработчики событий, агент очистки журнала. Таблицы, оставшиеся от удаления с сохранением данных, берем как есть
     public function InstallDB(): bool
     {
         global $APPLICATION;
@@ -133,6 +136,7 @@ class roman140176_redirects extends CModule
         foreach (self::EVENTS as $event => $method) {
             $eventManager->registerEventHandlerCompatible('main', $event, $this->MODULE_ID, EventHandler::class, $method);
         }
+        CAgent::AddAgent('\\' . NotFoundLog::class . '::cleanup();', $this->MODULE_ID, 'N', self::CLEANUP_INTERVAL);
         $this->restoreRights();
 
         return true;
