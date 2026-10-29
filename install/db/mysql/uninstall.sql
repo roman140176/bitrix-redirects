@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS roman140176_redirects_rule;
+DROP TABLE IF EXISTS roman140176_redirects_404;
